@@ -3,6 +3,7 @@ import random
 from deap import base
 from deap import creator
 from deap import tools
+import matplotlib.pyplot as plt
 
 from network import Network
 
@@ -60,12 +61,22 @@ class Runner:
         self.toolbox.register("mutate", tools.mutFlipBit, indpb=0.05)
         self.toolbox.register("select", tools.selTournament, tournsize=3)
 
+    def save_best(self, population, generation_No):
+        best_ind = tools.selBest(population, 1)[0]
+        self._network.redesign(best_ind)
+        self._network.draw(f'best_in_{generation_No}_generation')
+    
+    def save_worst(self, population, generation_No):
+        worst_ind = tools.selWorst(population, 1)[0]
+        self._network.redesign(worst_ind)
+        self._network.draw(f'worst_in_{generation_No}_generation')
+        
     def main(self):
         random.seed(32)
 
         # create an initial population of 300 individuals (where
         # each individual is a list of integers)
-        pop = self.toolbox.population(n=self._nindividuals)
+        pop = self.toolbox.population(n=self._n_individuals)
 
         # CXPB  is the probability with which two individuals
         #       are crossed
@@ -90,7 +101,9 @@ class Runner:
         
         # Begin the evolution
         # while max(fits) < 100 and g < self._ngenerations:
-        while g < self._ngenerations:
+        while g < self._n_generations:
+            self.save_best(pop, g)
+            self.save_worst(pop, g)
             # A new generation
             g = g + 1
             print("-- Generation %i --" % g)
@@ -151,7 +164,9 @@ class Runner:
         print("-- End of (successful) evolution --")
         
         best_ind = tools.selBest(pop, 1)[0]
+        self._network.redesign(best_ind)
         self._network.draw('best')
+
         print(best_ind.fitness.values[0])
         # print("Best individual is %s, %s" % (best_ind, best_ind.fitness.values))
 
@@ -159,15 +174,26 @@ if __name__ == "__main__":
     from data_context import DataContext
     from matplotlib.pyplot import scatter, show, Figure
 
-    path = 'projects/from_article/'
+    path = 'projects/square_layout/'
     dcontext = DataContext(path)
     network = Network(dcontext)
-    
+    network.draw('initial')
     runner = Runner(network)
     runner.main()
     
     xs = range(len(log['min']))
+    
     fig = Figure()
     scatter(xs, log['min'])
+    plt.savefig('minimum.png', format='PNG')
+    plt.close()
 
-    show()
+    fig = Figure()
+    scatter(xs, log['max'])
+    plt.savefig('maximum.png', format='PNG')
+    plt.close()
+
+    fig = Figure()
+    scatter(xs, log['avg'])
+    plt.savefig('avg.png', format='PNG')
+    plt.close()

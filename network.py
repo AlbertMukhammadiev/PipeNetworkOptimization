@@ -6,7 +6,8 @@ from data_context import DataContext
 
 class Network:
     def __init__(self, data_context) -> None:
-        self._internal = data_context.initial_graph()
+        self._data_context = data_context
+        self._internal = self._data_context.initial_graph()
         self._sinks = dict()
         self._sources = dict()
         for node, props in self._internal.nodes(data=True):
@@ -80,20 +81,7 @@ class Network:
                 self._internal.add_edge(*edge, **props)
 
     def draw(self, fname: 'filename.png'):
-        edge_attributes = dict()
-        for u, v, props in self._internal.edges(data=True):
-            label = f"diam {props['diameter']}   c {props['cost']}\nfr {round(props['flow_rate'])}   af {props['actual_flow']}\nl {props['length']}"
-            edge_attributes[(u, v)] = label
-
-        node_pos = nx.get_node_attributes(self._internal, 'position')
-        for node, pos in node_pos.items():
-            ppos = eval(pos)
-            node_pos[node] = (ppos['x'], ppos['y']) 
-        pprint(node_pos)
-        nx.draw(self._internal, node_pos, with_labels=True)
-        nx.draw_networkx_edge_labels(self._internal, node_pos, edge_labels=edge_attributes)
-        savefig(fname + '.png', format='PNG')
-        print(f'save internal in {fname}' + '.png')
+        self._data_context.save_png(self._internal, fname)
 
     def _close_scheme(self, scheme):
         sorted_props = sorted(scheme, key=lambda pipe: pipe.diameter)
@@ -109,6 +97,7 @@ class Network:
                 pass
             finally:
                 pass
+        # self._data_context.save_cost_model(scheme)
         return scheme
 
     def _max_cost(self):
