@@ -1,21 +1,3 @@
-#    This file is part of DEAP.
-#
-#    DEAP is free software: you can redistribute it and/or modify
-#    it under the terms of the GNU Lesser General Public License as
-#    published by the Free Software Foundation, either version 3 of
-#    the License, or (at your option) any later version.
-#
-#    DEAP is distributed in the hope that it will be useful,
-#    but WITHOUT ANY WARRANTY; without even the implied warranty of
-#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-#    GNU Lesser General Public License for more details.
-#
-#    You should have received a copy of the GNU Lesser General Public
-#    License along with DEAP. If not, see <http://www.gnu.org/licenses/>.
-
-
-#    example which maximizes the sum of a list of integers
-#    each of which can be 0 or 1
 import random
 
 from deap import base
@@ -23,7 +5,6 @@ from deap import creator
 from deap import tools
 
 from network import Network
-from reader import ReaderCSV, FileNames
 
 log = {
     'min': [],
@@ -36,9 +17,30 @@ class Runner:
         self._individual_size = network.nbits_required()
         self._network = network
         
-        self._ngenerations = 50
-        self._nindividuals = 100
+        self._n_generations = 100
+        self._n_individuals = 100
         self.configure_algorithm()
+
+    n_generations = property()
+    n_individuals = property()
+
+    @n_generations.setter
+    def n_generations(self, n):
+        if n < 100:
+            self._n_generations = 100
+        elif n > 1000:
+            self._n_generations = 1000
+        else:
+            self._n_generations = n
+
+    @n_individuals.setter
+    def n_individuals(self, n):
+        if n < 30:
+            self._n_individuals = 30
+        elif n > 200:
+            self._n_individuals = 200
+        else:
+            self._n_individuals = n
 
     def configure_algorithm(self):
         def evalOneMax(individual):
@@ -59,7 +61,7 @@ class Runner:
         self.toolbox.register("select", tools.selTournament, tournsize=3)
 
     def main(self):
-        random.seed(20)
+        random.seed(32)
 
         # create an initial population of 300 individuals (where
         # each individual is a list of integers)
@@ -69,7 +71,7 @@ class Runner:
         #       are crossed
         #
         # MUTPB is the probability for mutating an individual
-        CXPB, MUTPB = 0.5, 0.2
+        CXPB, MUTPB = 0.5, 0.1
         
         print("Start of evolution")
         
@@ -137,9 +139,9 @@ class Runner:
             sum2 = sum(x*x for x in fits)
             std = abs(sum2 / length - mean**2)**0.5
             
-            # print("  Min %s" % min(fits))
-            # print("  Max %s" % max(fits))
-            # print("  Avg %s" % mean)
+            print("  Min %s" % min(fits))
+            print("  Max %s" % max(fits))
+            print("  Avg %s" % mean)
             # print("  Std %s" % std)
             log['min'].append(min(fits))
             log['max'].append(max(fits))
@@ -149,27 +151,23 @@ class Runner:
         print("-- End of (successful) evolution --")
         
         best_ind = tools.selBest(pop, 1)[0]
-        # self._network.draw('best')
+        self._network.draw('best')
         print(best_ind.fitness.values[0])
         # print("Best individual is %s, %s" % (best_ind, best_ind.fitness.values))
 
 if __name__ == "__main__":
-    
-    FNAME_NODES = 'initial_layouts/square/nodes.csv'
-    FNAME_EDGES = 'initial_layouts/square/edges.csv'
-    FNAME_COSTS = 'initial_layouts/square/cost_data.csv'
-    fnames = FileNames(
-        nodes=FNAME_NODES,
-        edges=FNAME_EDGES,
-        costs=FNAME_COSTS,
-    )
+    from data_context import DataContext
+    from matplotlib.pyplot import scatter, show, Figure
 
-    reader = ReaderCSV(fnames)
-    network = Network(reader)
+    path = 'projects/from_article/'
+    dcontext = DataContext(path)
+    network = Network(dcontext)
+    
     runner = Runner(network)
     runner.main()
-    from matplotlib.pyplot import scatter, show
-    xs = range(len(log['min']))
-    scatter(xs, log['max'])
-    show()
     
+    xs = range(len(log['min']))
+    fig = Figure()
+    scatter(xs, log['min'])
+
+    show()

@@ -1,23 +1,22 @@
 import networkx as nx
 import math
-from reader import ReaderCSV, FileNames, EdgeProps
 from pprint import pprint
 from matplotlib.pyplot import savefig
+from data_context import DataContext
 
 class Network:
-    def __init__(self, reader: ReaderCSV) -> None:
-        nodes = reader.nodes_scheme()
-        self._sinks = {node: props for node, props in nodes.items()
-                       if props.type == 'sink'}
-        self._sources = {node: props for node, props in nodes.items()
-                         if props.type == 'source'}
-        self._max_layout = reader.edges_scheme()
-        self._cost_model = self._close_scheme(reader.cost_scheme())
+    def __init__(self, data_context) -> None:
+        self._internal = data_context.initial_graph()
+        self._sinks = dict()
+        self._sources = dict()
+        for node, props in self._internal.nodes(data=True):
+            if props['type'] == 'sink':
+                self._sinks[node] = props
+            elif props['type'] == 'source':
+                self._sources[node] = props
+        self._max_layout = {(u, v): props for u, v, props in self._internal.edges(data=True)}
+        self._cost_model = self._close_scheme(data_context.cost_model())
         self._edges_by_substringNo = self._map_substringNo()
-
-        self._internal = nx.Graph()
-        for label, props in nodes.items():
-            self._internal.add_node(label, pos=props.pos, type=props.type, demand=props.demand)
 
         self._MAX_COST = self._max_cost()
         self._NBITS_4PIPE = (len(bin(len(self._cost_model) - 1)) - 2)
@@ -32,18 +31,17 @@ class Network:
             for sink, sink_props in self._sinks.items():
                 path = nx.shortest_path(self._internal, sink, source)
                 for u, v in zip(path, path[1:]):
-                    self._internal[u][v]['actual_flow'] += sink_props.demand
+                    self._internal[u][v]['actual_flow'] += sink_props['demand']
 
     def penalty_cost(self):
         penalty = 0
-        for u, v, props in self._internal.edges(data=True):
+        for _, _, props in self._internal.edges(data=True):
             rate = props['actual_flow'] / props['flow_rate']
             if rate > 1:
                 penalty += props['cost'] * math.ceil(rate) * props['length'] * 10
         return penalty
 
     def total_cost(self, individual: list) -> float:
-        self._reset()
         self.redesign(individual)
 
         ncomponents = nx.algorithms.number_connected_components(self._internal)
@@ -60,6 +58,7 @@ class Network:
         return total_cost + penalty
 
     def redesign(self, bits: str) -> None:
+        self._reset()
         def flow_rate(diam: float, velocity: float):
             # TODO the dependence on units of measurement
             return 1 / 4 * math.pi * (diam) ** 2 * velocity / 1000
@@ -71,8 +70,8 @@ class Network:
             if pipe_props.cost:
                 edge = self._edges_by_substringNo[i]
                 props = dict(
-                    label=self._max_layout[edge].label,
-                    length=self._max_layout[edge].length,
+                    label=self._max_layout[edge]['label'],
+                    length=self._max_layout[edge]['length'],
                     diameter=pipe_props.diameter,
                     cost=pipe_props.cost,
                     flow_rate=flow_rate(pipe_props.diameter, self._VELOCITY),
@@ -86,27 +85,39 @@ class Network:
             label = f"diam {props['diameter']}   c {props['cost']}\nfr {round(props['flow_rate'])}   af {props['actual_flow']}\nl {props['length']}"
             edge_attributes[(u, v)] = label
 
-        node_pos = nx.get_node_attributes(self._internal, 'pos')
+        node_pos = nx.get_node_attributes(self._internal, 'position')
+        for node, pos in node_pos.items():
+            ppos = eval(pos)
+            node_pos[node] = (ppos['x'], ppos['y']) 
+        pprint(node_pos)
         nx.draw(self._internal, node_pos, with_labels=True)
         nx.draw_networkx_edge_labels(self._internal, node_pos, edge_labels=edge_attributes)
         savefig(fname + '.png', format='PNG')
         print(f'save internal in {fname}' + '.png')
 
     def _close_scheme(self, scheme):
-        max_coded = 2 ** len(next(iter(scheme)))
-        max_key, _ = max(scheme.items(), key=lambda pair: pair[1].cost)
-        for n in range(len(scheme), max_coded):
-            k = bin(n)[2:]
-            scheme[k] = scheme[max_key]
+        sorted_props = sorted(scheme, key=lambda pipe: pipe.diameter)
+        key_len = len(bin(len(scheme) - 1)) - 2
+        scheme = dict()
+        for num in range(2 ** key_len):
+            key = bin(num)[2:].zfill(key_len)
+            try:
+                scheme[key] = sorted_props[num]
+            except IndexError:
+                scheme[key] = sorted_props[-1]
+            else:
+                pass
+            finally:
+                pass
         return scheme
 
     def _max_cost(self):
         most_expensive = max([pipe.cost for pipe in self._cost_model.values()])
-        weights = [edge.length * most_expensive for edge in self._max_layout.values()]
+        weights = [edge['length'] * most_expensive for edge in self._max_layout.values()]
         return sum(weights)
 
     def _map_substringNo(self):
-        sorted_edges = sorted(self._max_layout.items(), key=lambda pair: pair[1].label)
+        sorted_edges = sorted(self._max_layout.items(), key=lambda pair: pair[1]['label'])
         links = [link for link, props in sorted_edges]
         substringsNo = list(range(len(self._max_layout)))
         return dict(zip(substringsNo, links))
@@ -116,19 +127,10 @@ class Network:
         self._internal.remove_edges_from(edges)
 
 
-
 if __name__ == '__main__':
-    FNAME_NODES = 'initial_layouts/square/nodes.csv'
-    FNAME_EDGES = 'initial_layouts/square/edges.csv'
-    FNAME_COSTS = 'initial_layouts/square/cost_data.csv'
-    fnames = FileNames(
-        nodes=FNAME_NODES,
-        edges=FNAME_EDGES,
-        costs=FNAME_COSTS,
-    )
-
-    reader = ReaderCSV(fnames)
-    network = Network(reader)
+    path = 'projects/square_layout/'
+    data_context = DataContext(path)
+    network = Network(data_context)
     individual = [
         0,1,0,0,     # 1
         0,0,0,0,     # 2
@@ -142,5 +144,37 @@ if __name__ == '__main__':
         1,0,1,0,     # 10
         0,0,1,1,     # 11
         0,0,1,0]     # 12
-    print(network.total_cost(individual))
+    
+    network.redesign(individual)
     network.draw('test')
+
+    # print(network.total_cost(individual))
+    # network.save_gexf('qwerty')
+    
+    # for node in network._internal.nodes(data=True):
+    #     print(node)
+
+    # from networkx.readwrite.gexf import read_gexf, write_gexf
+
+    # G = nx.path_graph(4)
+    
+    # G.nodes[0]['pos'] = {'x': 1, 'y': 3}
+    # G.nodes[0]['type'] = 'sink'
+    # G.nodes[0]['size'] = -123
+    
+    # for node in G.nodes(data=True):
+    #     print(node)
+    # print()
+    # nx.write_gexf(G, "test.gexf")
+
+
+
+    # g = read_gexf('test.gexf', node_type=int)
+    # for node in g.nodes(data=True):
+    #     print(node)
+
+    # # g = read_gexf('qwerty.gexf', node_type=int)
+    # # for node in g.nodes(data=True):
+    # #     print(node)
+
+    # # print(network.total_cost(individual))

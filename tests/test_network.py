@@ -2,24 +2,17 @@ import pytest
 
 @pytest.fixture
 def network():
-    from network import Network, FileNames, ReaderCSV
+    from network import Network
+    from data_context import DataContext
 
-    FNAME_NODES = '../initial_layouts/square/nodes.csv'
-    FNAME_EDGES = '../initial_layouts/square/edges.csv'
-    FNAME_COSTS = '../initial_layouts/square/cost_data.csv'
-    fnames = FileNames(
-        nodes=FNAME_NODES,
-        edges=FNAME_EDGES,
-        costs=FNAME_COSTS,
-    )
-
-    reader = ReaderCSV(fnames)
-    return Network(reader)
+    path = '../projects/square_layout/'
+    data_context = DataContext(path)
+    return Network(data_context)
 
 
 def test_total_cost(network):
     individual = [
-        0,1,0,0,     # 1
+        0,1,0,0,     # 1    
         0,0,0,0,     # 2
         0,0,1,1,     # 3
         0,0,1,0,     # 4
