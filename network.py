@@ -45,6 +45,12 @@ class Network:
         nx.draw_networkx_edges(self._graph, pos)
         plt.show()
 
+    @staticmethod
+    def flow_rate(diam: float, velocity: float):
+        # TODO the dependence on units of measurement
+        return 1 / 4 * math.pi * (diam) ** 2 * velocity / 1000 * 10
+
+
 class NetworkGA(Network):
     def __init__(self, sinks, sources):
         super().__init__(sinks, sources)
@@ -53,12 +59,15 @@ class NetworkGA(Network):
         self._layout = None
         self._edge_by_No = dict()
         self._n_isolated_nodes = 0
+        self._design = ''
 
     @Network.cost_model.setter
     def cost_model(self, value):
+        self._cost_model.clear()
+        if 0 not in [props.diameter for props in value]:
+            value.append(PipeProps(diameter=0, cost=0))
         sorted_props = sorted(value, key=lambda pipe: pipe.diameter)
         key_len = len(bin(len(value) - 1)) - 2
-        self._cost_model.clear()
         for num in range(2 ** key_len):
             key = bin(num)[2:].zfill(key_len)
             try:
@@ -88,8 +97,24 @@ class NetworkGA(Network):
             self._edges_props[(u, v)] = EdgeProps(length=1, No=numeration[edge])
             self._edge_by_No[numeration[edge]] = edge
 
-        pprint(self._graph.edges)
-        pprint(self._edges_props)
+    @property
+    def design(self):
+        return self._design
+
+    @design.setter
+    def design(self, value):
+        self._reset()
+        bits = ''.join(str(bit) for bit in value)
+        substrings = [bits[i:i + self._nbits_4pipe] for i in range(0, len(bits), self._nbits_4pipe)]
+        for i, substring in enumerate(substrings):
+            pipe_props = self._cost_model[substring]
+            if pipe_props.cost:
+                edge = self._edge_by_No[i]
+                self._edges_props[edge].diameter = pipe_props.diameter
+                self._edges_props[edge].cost = pipe_props.cost
+                self._edges_props[edge].actual_flow = 0
+                self._edges_props[edge].flow_rate = Network.flow_rate(pipe_props.diameter, self.VELOCITY)
+                self._graph.add_edge(*edge)
 
     def build_flows(self):
         for source in self._sources:
@@ -121,8 +146,7 @@ class NetworkGA(Network):
         #         penalty += props['cost'] * math.ceil(rate) * props['length'] * 3
         return penalty
 
-    def total_cost(self, individual: list) -> float:
-        self.redesign(individual)
+    def total_cost(self) -> float:
         if self._n_isolated_nodes > 0:
             return self._max_possible_cost * self._n_isolated_nodes
 
@@ -136,9 +160,6 @@ class NetworkGA(Network):
                 props = self._edges_props[(v, u)]
             total_cost += props.cost * props.length
 
-        # for props in self._current_state.values():
-        #     total_cost += props['cost'] * props['length']
-
         return total_cost + penalty
 
     def _max_cost(self):
@@ -148,30 +169,6 @@ class NetworkGA(Network):
 
     def nbits_required(self):
         return len(self._edges_props) * self._nbits_4pipe
-
-    def redesign(self, bits: str):
-        self._reset()
-
-        def flow_rate(diam: float, velocity: float):
-            # TODO the dependence on units of measurement
-            return 1 / 4 * math.pi * (diam) ** 2 * velocity / 1000 * 10
-
-        bits = ''.join(str(bit) for bit in bits)
-        substrings = [bits[i:i + self._nbits_4pipe] for i in range(0, len(bits), self._nbits_4pipe)]
-
-        for i, substring in enumerate(substrings):
-            pipe_props = self._cost_model[substring]
-            if pipe_props.cost:
-                edge = self._edge_by_No[i]
-                self._edges_props[edge].diameter = pipe_props.diameter
-                self._edges_props[edge].cost = pipe_props.cost
-                self._edges_props[edge].actual_flow = 0
-                self._edges_props[edge].flow_rate = flow_rate(pipe_props.diameter, self.VELOCITY)
-                # self._current_state['diameter'] = pipe_props.diameter
-                # self._current_state['cost'] = pipe_props.cost
-                # self._current_state['actua_flows'] = 0
-                # self._current_state['flow_rate'] = flow_rate(pipe_props.diameter, self.VELOCITY)
-                self._graph.add_edge(*edge)
 
     def _reset(self):
         # self._edges_props = dict()
