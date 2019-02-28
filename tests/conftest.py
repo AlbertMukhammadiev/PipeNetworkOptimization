@@ -16,7 +16,7 @@ def hexagon_layout():
 
 @pytest.fixture(scope='session')
 def empty_network():
-    return Network(dict(), dict())
+    return Network(list(), list())
 
 
 @pytest.fixture(scope='session')
@@ -37,4 +37,30 @@ def cost_model():
     ]
 
 
+@pytest.fixture(scope='function')
+def simple_project():
+    sinks = {
+        (2, 2): -120,
+    }
+    sources = {
+        (0, 0): 10,
+        (0, 1): 10,
+        (0, 2): 20,
+        (1, 0): 20,
+        (1, 1): 10,
+        (1, 2): 20,
+        (2, 0): 20,
+        (2, 1): 10,
+    }
 
+    network = NetworkGA(sinks, sources)
+    network.change_layout(SquareLayout(3, 3))
+    cost_model = [PipeProps(diameter=0.0, cost=0.0), PipeProps(diameter=80.0, cost=23.0),
+                  PipeProps(diameter=100.0, cost=32.0), PipeProps(diameter=120.0, cost=50.0),
+                  PipeProps(diameter=140.0, cost=60.0), PipeProps(diameter=160.0, cost=90.0),
+                  PipeProps(diameter=180.0, cost=130.0), PipeProps(diameter=200.0, cost=170.0),
+                  PipeProps(diameter=220.0, cost=300.0), PipeProps(diameter=240.0, cost=340.0),
+                  PipeProps(diameter=260.0, cost=390.0), PipeProps(diameter=280.0, cost=430.0),
+                  PipeProps(diameter=300.0, cost=470.0), PipeProps(diameter=320.0, cost=500.0)]
+    network.cost_model = cost_model
+    return network
