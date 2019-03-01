@@ -25,6 +25,28 @@ def test_cost_model_has0(empty_ga_network):
     assert 0 in diameters
 
 
+def test_preliminary_cost(simple_project):
+    simple_project.bit_representation = [0, 0, 0, 0] * 12
+    assert simple_project.preliminary_cost() == 0
+    simple_project.bit_representation = [1, 1, 1, 1] * 12
+    assert simple_project.preliminary_cost() == 6000
+    simple_project.bit_representation = [
+        0, 0, 0, 0,
+        0, 0, 0, 1,
+        0, 0, 1, 0,
+        0, 0, 1, 1,
+        0, 1, 0, 0,
+        0, 1, 0, 1,
+        0, 1, 1, 0,
+        0, 1, 1, 1,
+        1, 0, 0, 0,
+        1, 0, 0, 1,
+        1, 0, 1, 0,
+        1, 0, 1, 1,
+    ]
+    assert simple_project.preliminary_cost() == 2015
+
+
 def test_total_cost(empty_ga_network, square_layout, cost_model):
     assert empty_ga_network.total_cost() == 0
     empty_ga_network.change_layout(square_layout)
@@ -44,26 +66,16 @@ def test_total_cost(empty_ga_network, square_layout, cost_model):
     empty_ga_network.bit_representation = test_design
     assert empty_ga_network.total_cost() == 4140
 
-    assert empty_ga_network._max_possible_cost == 90000
-
 
 def test_penalty_cost(simple_project):
-    simple_project.bit_representation = [
-        0, 0, 0, 0,
-        0, 0, 0, 0,
-        1, 1, 1, 1,
-        1, 1, 1, 1,
-        1, 1, 1, 1,
-        1, 1, 1, 1,
-        1, 1, 1, 1,
-        1, 1, 1, 1,
-        1, 1, 1, 1,
-        1, 1, 1, 1,
-        1, 1, 1, 1,
-        1, 1, 1, 1,
-    ]
+    simple_project.bit_representation = [0, 0, 0, 0] * 2 + [1, 1, 1, 1] * 10
+    assert simple_project.total_cost() == simple_project._max_possible_cost
 
-    guess_penalty = simple_project._max_possible_cost * 3
-    assert simple_project.total_cost() == guess_penalty
-    simple_project.draw_in_detail()
+    simple_project.bit_representation = [0, 0, 0, 0] * 7 + [1, 1, 1, 1] * 5
+    assert simple_project.total_cost() == simple_project._max_possible_cost * 4
 
+
+def test_max_possible_cost(empty_ga_network, square_layout, cost_model):
+    empty_ga_network.change_layout(square_layout)
+    empty_ga_network.cost_model = cost_model
+    assert empty_ga_network._max_possible_cost == 180000

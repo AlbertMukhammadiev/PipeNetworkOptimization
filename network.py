@@ -23,9 +23,9 @@ class Network:
         self._nodes_props = dict()
         self._drawing_kwargs = {
             'node_color': 'aqua',
-            'node_size': 200,
+            'node_size': 400,
             'alpha': 0.8,
-            'font_size': 6,
+            'font_size': 8,
             'rotate': False,
             'labels': self._nodes_props,
             'edge_labels': self._edges_props,
@@ -89,7 +89,7 @@ class Network:
         rates = []
         for edge in self._design.edges:
             props = self._edges_props[edge]
-            rates.append(math.ceil(props.actual_flow / props.flow_rate))
+            rates.append(math.floor(props.actual_flow / props.flow_rate))
         return sum(costs * lengths * np.array(rates))
 
     def _add_node(self, node, position, demand=0):
@@ -99,7 +99,7 @@ class Network:
         )
 
     def _add_edge(self, u, v,
-                  length=1, diameter=0, flow_rate=0,
+                  length=1, diameter=1, flow_rate=0,
                   actual_flow=0, No=None, cost=0):
         props = EdgeProps(
             length=length,
