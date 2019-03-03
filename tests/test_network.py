@@ -77,5 +77,6 @@ def test_penalty_cost(simple_project):
 
 def test_max_possible_cost(empty_ga_network, square_layout, cost_model):
     empty_ga_network.change_layout(square_layout)
+    assert empty_ga_network._max_possible_cost == 0
     empty_ga_network.cost_model = cost_model
-    assert empty_ga_network._max_possible_cost == 180000
+    assert empty_ga_network._max_possible_cost == 90000

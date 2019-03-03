@@ -13,7 +13,15 @@ class Layout:
 
     @property
     def numerated_edges(self):
-        return dict(zip(self._edges, range(len(self._edges))))
+        graph = nx.Graph()
+        graph.add_edges_from(self._edges)
+        path_bfs = nx.edge_bfs(graph, (0, 0))
+        numerated_edges = {}
+        for i, edge in enumerate(path_bfs):
+            u, v = edge
+            numerated_edges[u, v] = i
+            numerated_edges[v, u] = i
+        return numerated_edges
 
     @property
     def edges(self):

@@ -4,22 +4,22 @@ from network import Network, NetworkGA
 from properties import PipeProps
 
 
-@pytest.fixture(scope='session')
+@pytest.fixture(scope='function')
 def square_layout():
     return SquareLayout(10, 10)
 
 
-@pytest.fixture(scope='session')
+@pytest.fixture(scope='function')
 def hexagon_layout():
     return HexagonLayout(10, 10)
 
 
-@pytest.fixture(scope='session')
+@pytest.fixture(scope='function')
 def empty_network():
     return Network(list(), list())
 
 
-@pytest.fixture(scope='session')
+@pytest.fixture(scope='function')
 def empty_ga_network():
     return NetworkGA(dict(), dict())
 

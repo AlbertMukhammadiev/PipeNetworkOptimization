@@ -23,12 +23,12 @@ class Network:
         self._nodes_props = dict()
         self._drawing_kwargs = {
             'node_color': 'aqua',
-            'node_size': 400,
+            'node_size': 100,
             'alpha': 0.8,
-            'font_size': 8,
+            'font_size': 1,
             'rotate': False,
             'labels': self._nodes_props,
-            'edge_labels': self._edges_props,
+            # 'edge_labels': self._edges_props,
         }
 
     def _init_design_constants(self):
@@ -71,7 +71,8 @@ class Network:
         nx.draw_networkx_nodes(self._design, pos, **self._drawing_kwargs)
         nx.draw_networkx_labels(self._design, pos, **self._drawing_kwargs)
         nx.draw_networkx_edges(self._design, pos, **self._drawing_kwargs)
-        nx.draw_networkx_edge_labels(self._design, pos, **self._drawing_kwargs)
+        edge_labels = {edge: props for edge, props in self._edges_props.items() if edge in self._design.edges}
+        nx.draw_networkx_edge_labels(self._design, pos, edge_labels=edge_labels, **self._drawing_kwargs)
         plt.savefig(path, format='pdf')
         plt.close()
 
@@ -113,24 +114,21 @@ class Network:
         self._edges_props[v, u] = props
         self._design.add_edge(u, v)
 
-    def _update_node(self, node, position, demand=0):
+    def _update_node(self, node, position, demand):
         self._nodes_props[node].position = position
         self._nodes_props[node].demand = demand
 
-    def _update_edge(self, u, v,
-                     length=1, diameter=0, flow_rate=0,
-                     actual_flow=0, No=None, cost=0):
-        self._edges_props[u, v].length = length
-        self._edges_props[u, v].diameter = diameter
-        self._edges_props[u, v].flow_rate = flow_rate
-        self._edges_props[u, v].actual_flow = actual_flow
-        self._edges_props[u, v].No = No
+    def _update_edge(self, u, v, diameter, cost):
+        self._edges_props[u, v].actual_flow = 0
         self._edges_props[u, v].cost = cost
+        self._edges_props[u, v].diameter = diameter
+        self._edges_props[u, v].flow_rate =\
+            Network.flow_rate(diameter, self.VELOCITY)
 
     def _update_max_possible_cost(self):
         most_expensive = max([pipe.cost for pipe in self.cost_model])
         weights = [props.length * most_expensive for props in self._edges_props.values()]
-        self._max_possible_cost = sum(weights)
+        self._max_possible_cost = sum(weights) / 2
 
     def _nearest_node(self, point):
         nearest = None
@@ -217,6 +215,9 @@ class NetworkGA(Network):
                     n_isolated_sources += 1
         return n_isolated_sources
 
+    def nbits_required(self):
+        return (len(bin(len(self.cost_model) - 1)) - 2) * len(self._edges_props) // 2
+
     def _reset(self):
         edges = list(self._design.edges())
         self._design.remove_edges_from(edges)
@@ -233,37 +234,9 @@ class NetworkGA(Network):
                 self._update_edge(
                     *edge,
                     diameter=pipe_props.diameter,
-                    cost=pipe_props.cost,
-                    actual_flow=0,
-                    flow_rate=Network.flow_rate(pipe_props.diameter, self.VELOCITY)
+                    cost=pipe_props.diameter,
                 )
 
 
 if __name__ == '__main__':
-    from layouts import SquareLayout, HexagonLayout
-
-    sinks = {
-        (2, 2): -120,
-    }
-    sources = {
-        (0, 0): 10,
-        (0, 1): 10,
-        (0, 2): 20,
-        (1, 0): 20,
-        (1, 1): 10,
-        (1, 2): 20,
-        (2, 0): 20,
-        (2, 1): 10,
-    }
-
-    network = NetworkGA(sinks, sources)
-    network.change_layout(SquareLayout(3, 3))
-    cost_model = [PipeProps(diameter=0.0, cost=0.0), PipeProps(diameter=80.0, cost=23.0),
-                  PipeProps(diameter=100.0, cost=32.0), PipeProps(diameter=120.0, cost=50.0),
-                  PipeProps(diameter=140.0, cost=60.0), PipeProps(diameter=160.0, cost=90.0),
-                  PipeProps(diameter=180.0, cost=130.0), PipeProps(diameter=200.0, cost=170.0),
-                  PipeProps(diameter=220.0, cost=300.0), PipeProps(diameter=240.0, cost=340.0),
-                  PipeProps(diameter=260.0, cost=390.0), PipeProps(diameter=280.0, cost=430.0),
-                  PipeProps(diameter=300.0, cost=470.0), PipeProps(diameter=320.0, cost=500.0)]
-    network.cost_model = cost_model
-    network.draw_in_detail()
+    pass
