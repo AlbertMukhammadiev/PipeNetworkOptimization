@@ -21,6 +21,26 @@ class GA:
         # The probability with which two individuals are crossed
         self._crossover_probability = 0.5
 
+    @staticmethod
+    def individual_2d(n, m):
+        return [random.choices([0, 1], k=m) for _ in range(n)]
+
+    @staticmethod
+    def crossover_2point_2d(ind1, ind2):
+        n = min(len(ind1), len(ind2))
+        m = min(len(ind1[0]), len(ind2[0]))
+        cx_points = random.choices(range(m), k=2)
+        print(cx_points)
+        cy_points = random.choices(range(n), k=2)
+        print(cy_points)
+        cx_point1, cx_point2 = min(cx_points), max(cx_points) + 1
+        cy_point1, cy_point2 = min(cy_points), max(cy_points) + 1
+        for i in range(cy_point1, cy_point2):
+            ind1[i][cx_point1:cx_point2], ind2[i][cx_point1:cx_point2] \
+                = ind2[i][cx_point1:cx_point2], ind1[i][cx_point1:cx_point2]
+
+        return ind1, ind2
+
     @property
     def network(self):
         return 'some network'
