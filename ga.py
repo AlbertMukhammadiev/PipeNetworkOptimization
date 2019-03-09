@@ -1,5 +1,6 @@
 import random
 from deap import base, creator, tools
+from layouts import TraversingType
 
 
 class GA:
@@ -14,12 +15,21 @@ class GA:
 
     def _init_ga_properties(self):
         self._individual_size = self._network.nbits_required()
-        self._n_generations = 100
-        self._n_individuals = 100
+        self._n_generations = 300
+        self._n_individuals = 5000
         # The probability for mutating an individual
         self._mutation_probability = 0.1
         # The probability with which two individuals are crossed
         self._crossover_probability = 0.5
+
+    @staticmethod
+    def mutation_2d(individual, indpb):
+        for i in range(len(individual)):
+            for j in range(len(individual[i])):
+                if random.random() < indpb:
+                    individual[i][j] = type(individual[i][j])(not individual[i][j])
+
+        return individual,
 
     @staticmethod
     def individual_2d(n, m):
@@ -30,9 +40,7 @@ class GA:
         n = min(len(ind1), len(ind2))
         m = min(len(ind1[0]), len(ind2[0]))
         cx_points = random.choices(range(m), k=2)
-        print(cx_points)
         cy_points = random.choices(range(n), k=2)
-        print(cy_points)
         cx_point1, cx_point2 = min(cx_points), max(cx_points) + 1
         cy_point1, cy_point2 = min(cy_points), max(cy_points) + 1
         for i in range(cy_point1, cy_point2):
@@ -105,6 +113,8 @@ class GA:
     def main(self):
         self._configure_algorithm()
         population = self.toolbox.population(n=self._n_individuals)
+
+
         print("Start of evolution")
         # Evaluate the entire population
         fitnesses = list(map(self.toolbox.evaluate, population))
@@ -175,14 +185,30 @@ class GA:
         creator.create("FitnessMin", base.Fitness, weights=(-1.0,))
         creator.create("Individual", list, fitness=creator.FitnessMin)
 
+        indexing = self._network.layout.get_edge_indexing(TraversingType.BY_CONSTRUCTION)
+        n, m = 0, 0
+        for index in indexing.values():
+            if index.i > n:
+                n = index.i
+            if index.j > m:
+                m = index.j
+        n += 1
+        m += 1
+        print(n, m)
+
+
         self.toolbox = base.Toolbox()
-        self.toolbox.register("attr_bool", random.choice, (0, 1))
+        self.toolbox.register("attr_bool", random.choices, (0, 1), k=m*4)
+
+
         self.toolbox.register("individual", tools.initRepeat, creator.Individual,
-                              self.toolbox.attr_bool, self._individual_size)
+                              self.toolbox.attr_bool, n)
         self.toolbox.register("population", tools.initRepeat, list, self.toolbox.individual)
         self.toolbox.register("evaluate", evalOneMax)
-        self.toolbox.register("mate", tools.cxTwoPoint)
-        self.toolbox.register("mutate", tools.mutFlipBit, indpb=0.05)
+        self.toolbox.register("mate", GA.crossover_2point_2d)
+        # self.toolbox.register("mate", tools.cxTwoPoint)
+        # self.toolbox.register("mutate", tools.mutFlipBit, indpb=0.05)
+        self.toolbox.register("mutate", GA.mutation_2d, indpb=0.05)
         self.toolbox.register("select", tools.selTournament, tournsize=3)
 
     def _update_log(self, population):
@@ -218,7 +244,7 @@ if __name__ == "__main__":
     # pass
 
     from properties import PipeProps
-    from network import NetworkGA
+    from network import NetworkGA, NetworkGA2d
     from layouts import SquareLayout, HexagonLayout
     from ga import GA
 
@@ -246,12 +272,14 @@ if __name__ == "__main__":
                   PipeProps(diameter=260.0, cost=390.0), PipeProps(diameter=280.0, cost=430.0),
                   PipeProps(diameter=300.0, cost=470.0), PipeProps(diameter=320.0, cost=500.0)]
 
-    network = NetworkGA(sinks, sources)
-    network.change_layout(HexagonLayout(10, 10))
+    network = NetworkGA2d(sinks, sources)
+    layout = SquareLayout(11)
+    layout.scale = 1
+    network.layout = layout
     network.cost_model = cost_model
+
 
     ga = GA()
     ga.network = network
-    ga.n_generations = 300
-    ga.n_individuals = 1000
+
     ga.main()
