@@ -1,48 +1,75 @@
-import matplotlib.pyplot as plt
-import networkx as nx
-import numpy as np
 import math
+import numpy as np
+import networkx as nx
+import matplotlib.pyplot as plt
 
-from properties import *
-from layouts import *
+from collections import namedtuple
+PipeProps = namedtuple('PipeProps', ['diameter', 'cost'])
+Point = namedtuple('Point', ['x', 'y'])
 
 
 class Network:
-    def __init__(self, sinks, sources):
+    def __init__(self, layout, cost_model):
         self._design = nx.Graph()
-        self._init_task_entities(sinks, sources)
-        self._init_auxiliary_entities()
-        self._init_design_constants()
+        self._edges = layout.edges
+        self._nodes = layout.nodes
+        self._sinks = set()
+        self._sources = set()
+        self._init_cost_model(cost_model)
+        self._init_max_possible_cost()
 
-    def _init_task_entities(self, sinks, sources):
-        self._sources = sources
-        self._sinks = sinks
+    def _init_cost_model(self, cost_model):
         self._cost_model = list()
+        if 0 not in [props['diameter'] for props in cost_model]:
+            self._cost_model.append(dict(diameter=0, cost=0))
+        self._cost_model.extend(cost_model)
 
-    def _init_auxiliary_entities(self):
-        self._edges_props = dict()
-        self._nodes_props = dict()
-
-    def _init_design_constants(self):
-        self._max_possible_cost = 0
-        self.VELOCITY = 1
+    def _init_max_possible_cost(self):
+        self._most_expensive = max([pipe['cost'] for pipe in self._cost_model])
+        lengths = [props['length'] for props in self._edges.values()]
+        self._max_possible_cost = sum(self._most_expensive * np.array(lengths)) / 2
 
     @staticmethod
     def flow_rate(diameter: float, velocity: float):
-        # TODO the dependence on units of measurement
         return 1 / 4 * math.pi * diameter ** 2 * velocity / 1000
 
-    @property
-    def cost_model(self):
-        return self._cost_model.copy()
+    def add_sink(self, position, demand):
+        if demand < 0:
+            node = self._nearest_to(point=position)
+            self._update_node(node, position=position, demand=demand)
+            self._sinks.add(node)
+            print(f'--- the sink was set at point {position}')
 
-    @cost_model.setter
-    def cost_model(self, value):
-        self._cost_model.clear()
-        if 0 not in [props.diameter for props in value]:
-            value.append(PipeProps(diameter=0, cost=0))
-        self._cost_model.extend(value)
-        self._update_max_possible_cost()
+    def add_source(self, position, demand):
+        if demand > 0:
+            node = self._nearest_to(point=position)
+            self._update_node(node, position=position, demand=demand)
+            self._sources.add(node)
+            print(f'--- the source was set at point {position}')
+
+    def development_cost(self):
+        return self.preliminary_cost() + self.penalty_cost()
+
+    def preliminary_cost(self):
+        costs = [self._edges[edge]['cost'] for edge in self._design.edges]
+        lengths = [self._edges[edge]['length'] for edge in self._design.edges]
+        return sum(np.array(costs) * np.array(lengths))
+
+    def penalty_cost(self):
+        lengths = [self._edges[edge]['length'] for edge in self._design.edges]
+        redevelopment_cost = []
+        for edge in self._design.edges:
+            props = self._edges[edge]
+            rate = math.floor(props['actual_flow'] / props['flow_rate'])
+            redevelopment_cost.append(rate * self._most_expensive)
+        return sum(np.array(redevelopment_cost) * np.array(lengths))
+
+    def distance(self, u, v):
+        if not isinstance(u, Point):
+            u = self._nodes[u]['position']
+        if not isinstance(v, Point):
+            v = self._nodes[v]['position']
+        return math.hypot(v.y - u.y, v.x - u.x)
 
     def draw(self):
         pos, kwargs = self._drawing_configurations()
@@ -51,6 +78,7 @@ class Network:
         plt.show()
 
     def draw_in_detail(self):
+        self._design.add_edges_from(self._edges)
         pos, kwargs = self._drawing_configurations()
         nx.draw_networkx_nodes(self._design, pos, **kwargs)
         nx.draw_networkx_labels(self._design, pos, **kwargs)
@@ -67,303 +95,150 @@ class Network:
         plt.savefig(path, format='pdf')
         plt.close()
 
-    def total_cost(self):
-        return self.preliminary_cost() + self.penalty_cost()
+    def _update_node(self, node, **kwargs):
+        for key, value in kwargs.items():
+            self._nodes[node][key] = value
 
-    def preliminary_cost(self):
-        costs = [self._edges_props[edge]['cost'] for edge in self._design.edges]
-        lengths = [self._edges_props[edge]['length'] for edge in self._design.edges]
-        return sum(np.array(costs) * np.array(lengths))
+    def _update_edge(self, u, v, **kwargs):
+        for key, value in kwargs.items():
+            self._edges[u, v][key] = value
 
-    def penalty_cost(self):
-        costs = [self._edges_props[edge]['cost'] for edge in self._design.edges]
-        lengths = [self._edges_props[edge]['length'] for edge in self._design.edges]
-        rates = []
-        for edge in self._design.edges:
-            props = self._edges_props[edge]
-            rates.append(math.floor(props['actual_flow'] / props['flow_rate']))
-        return sum(np.array(costs) * np.array(lengths) * np.array(rates))
+    def _nearest_to(self, point):
+        return min(
+            self._nodes,
+            key=lambda node: self.distance(point, node)
+        )
 
     def _drawing_configurations(self):
-        pos = {node: self._nodes_props[node]['position'] for node in self._design.nodes}
+        pos = {node: self._nodes[node]['position'] for node in self._design.nodes}
         kwargs = {
             'node_color': [],
-            'node_size': 30,
-            'alpha': 0.8,
+            'node_size': 50,
+            'node_shape': 's',
+            'alpha': 1,
             'font_size': 1,
             'rotate': False,
-            'labels': self._nodes_props,
-            'edge_labels': {}
-        }
+            'width': 0.2,
+            'labels': {},
+            'edge_labels': {}}
 
         for node in self._design.nodes:
-            if self._nodes_props[node]['demand'] > 0:
-                kwargs['node_color'].append('aqua')
-            elif self._nodes_props[node]['demand'] < 0:
-                kwargs['node_color'].append('green')
+            if self._nodes[node]['demand'] > 0:
+                kwargs['node_color'].append('lightgreen')
+            elif self._nodes[node]['demand'] < 0:
+                kwargs['node_color'].append('salmon')
             else:
-                kwargs['node_color'].append('white')
+                kwargs['node_color'].append('lightgoldenrodyellow')
         for edge in self._design.edges:
-            props = self._edges_props[edge]
-            label = f'd: {props["diameter"]}\nc: {props["cost"]}'
+            props = self._edges[edge]
+            label = f'l:{props["length"]} d:{props["diameter"]} c:{props["cost"]}\n' \
+                f'flow: {props["actual_flow"]}/{round(props["flow_rate"], 2)}\n' \
+                f'index: {props["constr_No"]}/{props["2d"]}/{props["bfs_ind"]}\n' \
+                f'gene: {props["gene"]}'
             kwargs['edge_labels'][edge] = label
+        for node in self._design.nodes:
+            props = self._nodes[node]
+            label = f'pos: ({props["position"].x}, {props["position"].y})\n' \
+                f'demand: {props["demand"]}'
+            kwargs['labels'][node] = label
 
         return pos, kwargs
 
-    def _add_node(self, node, position, demand=0):
-        self._nodes_props[node] = dict(
-            position=position,
-            demand=demand,
-        )
-
-    def _add_edge(self, u, v, index,
-                  length=1, diameter=1, cost=0,
-                  flow_rate=0, actual_flow=0):
-        props = dict(
-            length=length,
-            diameter=diameter,
-            flow_rate=flow_rate,
-            actual_flow=actual_flow,
-            index=index,
-            cost=cost,
-        )
-
-        self._edges_props[u, v] = props
-        self._edges_props[v, u] = props
-        self._design.add_edge(u, v)
-
-    def _update_node(self, node, position, demand):
-        self._nodes_props[node]['position'] = position
-        self._nodes_props[node]['demand'] = demand
-
-    def _update_edge(self, u, v, diameter, cost, bits):
-        self._edges_props[u, v]['actual_flow'] = 0
-        self._edges_props[u, v]['cost'] = cost
-        self._edges_props[u, v]['diameter'] = diameter
-        self._edges_props[u, v]['flow_rate'] =\
-            Network.flow_rate(diameter, self.VELOCITY)
-        self._edges_props[u, v]['bits'] = bits
-
-    def _update_max_possible_cost(self):
-        most_expensive = max([pipe.cost for pipe in self.cost_model])
-        lengths = [props['length'] for props in self._edges_props.values()]
-        self._max_possible_cost = sum(most_expensive * np.array(lengths)) / 2
-
-    # TODO fix function
-    def _nearest_node(self, point):
-        nearest = None
-        dist_nearest = 1000000
-        # for node in self._design.nodes:
-        for node, props in self._nodes_props.items():
-            # x_node, y_node = self._nodes_props[node]['position']
-            x_node, y_node = props['position']
-            current_dist = math.hypot(y_node - point[1], x_node - point[0])
-            if current_dist < dist_nearest:
-                nearest = node
-                dist_nearest = current_dist
-        return nearest
-
-    def _reset_design(self):
-        edges = list(self._design.edges())
-        self._design.remove_edges_from(edges)
-
 
 class NetworkGA(Network):
-    def __init__(self, sinks, sources):
-        super().__init__(sinks, sources)
-        self._layout = nx.Graph()
-        self._nbits_4pipe = 0
-        self._bits_mapping = dict()
-        self._bit_representation = np.array([])
-        self._edge_by_index = dict()
-
-    @property
-    def cost_model(self):
-        return self._cost_model.copy()
-
-    # TODO call setter of base class
-    @cost_model.setter
-    def cost_model(self, value):
-        ##############################33
-        self._cost_model.clear()
-        if 0 not in [props.diameter for props in value]:
-            value.append(PipeProps(diameter=0, cost=0))
-        self._cost_model.extend(value)
-        self._update_max_possible_cost()
-        #####################################
-
-        self._bits_mapping.clear()
-        # math.sqrt(1 << (len(self.cost_model) - 1).bit_length())
-        key_len = (len(bin(len(self.cost_model) - 1)) - 2)
-        sorted_props = sorted(self.cost_model, key=lambda pipe: pipe.diameter)
-        for number in range(2 ** key_len):
-            key = bin(number)[2:].zfill(key_len)
-            try:
-                self._bits_mapping[key] = sorted_props[number]
-            except IndexError:
-                self._bits_mapping[key] = sorted_props[-1]
-
-    @property
-    def layout(self):
-        return self._layout
-
-    # TODO reset props and indexing?
-    @layout.setter
-    def layout(self, value):
-        self._reset_design()
-        self._layout = value
+    def __init__(self, layout, cost_model):
+        super().__init__(layout=layout, cost_model=cost_model)
+        self._init_ga_attributes()
         self._init_edge_by_index()
-        # TODO indexing was replaced by _init_edge_by_index
-        indexing = {k: v for v, k in self._edge_by_index.items()}
-        for edge in self._layout.edges:
-            self._add_edge(*edge, index=indexing[edge.v, edge.u])
-            self._add_node(edge.u, position=edge.u)
-            self._add_node(edge.v, position=edge.v)
 
-        self._place_productive_nodes_on_layout()
+    def _init_edge_by_index(self):
+        self._chromosome_shape = len(self._edges) * self._b_len // 2
+        self._edge_by_index = dict()
+        for edge, props in self._edges.items():
+            self._edge_by_index[props['constr_No']] = edge
+
+    def _init_ga_attributes(self):
+        self._c = None
+        self._mapped_cost_model = dict()
+        self._b_len = (len(bin(len(self._cost_model) - 1)) - 2)
+        sorted_props = sorted(self._cost_model, key=lambda pipe: pipe['diameter'])
+        for number in range(2 ** self._b_len):
+            key = bin(number)[2:].zfill(self._b_len)
+            try:
+                self._mapped_cost_model[key] = sorted_props[number]
+            except IndexError:
+                self._mapped_cost_model[key] = sorted_props[-1]
 
     @property
-    def bit_representation(self):
-        return self._bit_representation.copy()
+    def chromosome(self):
+        return self._c.copy()
 
-    @bit_representation.setter
-    def bit_representation(self, value):
+    @chromosome.setter
+    def chromosome(self, value):
         self._reset_design()
-        self._bit_representation = np.array(value)
+        self._c = value
         self._redesign()
 
-    def total_cost(self) -> float:
-        n_isolated_sources = self.calculate_flows()
-        if n_isolated_sources > 0:
-            return self._max_possible_cost * n_isolated_sources
+    @property
+    def chromosome_shape(self):
+        return self._chromosome_shape
+
+    def development_cost(self) -> float:
+        if self._n_isolated_sources > 0:
+            return self._max_possible_cost * self._n_isolated_sources
         else:
-            return super().total_cost()
+            return super().development_cost()
 
-    # TODO delete method
-    def change_layout(self, layout):
-        self.layout = layout
-
-    def calculate_flows(self):
-        n_isolated_sources = 0
-        for source, demand in self._sources.items():
-            for sink, _ in self._sinks.items():
+    def _calculate_flows(self):
+        self._n_isolated_sources = 0
+        for source in self._sources:
+            for sink in self._sinks:
                 try:
-                    source = Point(x=source[0], y=source[1])
-                    sink = Point(x=sink[0], y=sink[1])
                     traces = nx.shortest_path(self._design, source, sink)
                     for u, v in zip(traces, traces[1:]):
-                        self._edges_props[u, v]['actual_flow'] += demand
+                        self._edges[u, v]['actual_flow'] += self._nodes[source]['demand']
                 except nx.exception.NetworkXNoPath:
-                    n_isolated_sources += 1
-        return n_isolated_sources
+                    self._n_isolated_sources += 1
 
-    def nbits_required(self):
-        return (len(bin(len(self.cost_model) - 1)) - 2) * len(self._edges_props) // 2
+    def _redesign(self):
+        for i in range(self.chromosome_shape // self._b_len):
+            bits = self._c[i * self._b_len:(i + 1) * self._b_len]
+            self._redesign_edge(index=i, gene=bits)
+        self._calculate_flows()
 
-    def _update_edge(self, bits, index):
-        bits = ''.join(str(bit) for bit in bits)
-        pipe_props = self._bits_mapping[bits]
-        if pipe_props.cost:
-            edge = self._edge_by_index[index]
-            self._design.add_edge(*edge)
+    def _redesign_edge(self, index, gene):
+        u, v = self._edge_by_index[index]
+        props = self._mapped_cost_model[''.join(map(str, gene))]
+        if props['diameter']:
+            self._design.add_edge(u, v)
             super()._update_edge(
-                *edge,
-                diameter=pipe_props.diameter,
-                cost=pipe_props.cost,
-                bits=bits)
+                u, v,
+                diameter=props['diameter'],
+                cost=props['cost'],
+                flow_rate=Network.flow_rate(props['diameter'], 1),
+                gene=gene
+            )
 
+    def _reset_design(self):
+        edges = list(self._design.edges)
+        self._design.remove_edges_from(edges)
+        for edge in self._edges:
+            self._edges[edge]['actual_flow'] = 0
+
+
+class NetworkGA2D(NetworkGA):
     def _init_edge_by_index(self):
-        indexing = self._layout.get_edge_indexing(TraversingType.BFS)
-        self._edge_by_index = {index: edge for edge, index in indexing.items()}
+        self._edge_by_index = dict()
+        for edge, props in self._edges.items():
+            self._edge_by_index[props['constr_No']] = edge
 
-    # TODO scale
-    def _place_productive_nodes_on_layout(self):
-        scale = self._layout.scale
-        for pos, demand in self._sinks.items():
-            position = pos[0] / scale, pos[1] / scale
-            nearest = self._nearest_node(position)
-            self._update_node(nearest, position=position, demand=demand)
-        for pos, demand in self._sources.items():
-            position = pos[0] / scale, pos[1] / scale
-            nearest = self._nearest_node(position)
-            self._update_node(nearest, position=position, demand=demand)
+        n = max(i for i, j in self._edge_by_index.keys()) + 1
+        m = max(j for i, j in self._edge_by_index.keys()) + 1
+        self._chromosome_shape = (n, m * self._b_len)
 
     def _redesign(self):
-        substring_len = (len(bin(len(self.cost_model) - 1)) - 2)
-        n = self._bit_representation.shape[0]
-        for i in range(n // substring_len):
-            bits = self._bit_representation[i * substring_len:(i + 1) * substring_len]
-            self._update_edge(bits=bits, index=i)
-
-
-class NetworkGA2d(NetworkGA):
-    def _init_edge_by_index(self):
-        indexing = self._layout.get_edge_indexing(TraversingType.BY_CONSTRUCTION)
-        self._edge_by_index = {index: edge for edge, index in indexing.items()}
-
-    def _redesign(self):
-        substring_len = (len(bin(len(self.cost_model) - 1)) - 2)
-        n, m = self._bit_representation.shape
+        n, m = self.chromosome_shape
         for i in range(n):
-            for j in range(m // substring_len):
-                bits = self._bit_representation[i][j * substring_len:(j + 1) * substring_len]
-                self._update_edge(bits=bits, index=(i, j))
-
-
-if __name__ == '__main__':
-    sinks = {
-        (2, 2): -120,
-    }
-    sources = {
-        (0, 0): 10,
-        (0, 1): 10,
-        (0, 2): 20,
-        (1, 0): 20,
-        (1, 1): 10,
-        (1, 2): 20,
-        (2, 0): 20,
-        (2, 1): 10,
-    }
-    #
-    # network = NetworkGA(sinks, sources)
-    # network.change_layout(SquareLayout(10))
-    # cost_model = [PipeProps(diameter=0.0, cost=0.0), PipeProps(diameter=80.0, cost=23.0),
-    #               PipeProps(diameter=100.0, cost=32.0), PipeProps(diameter=120.0, cost=50.0),
-    #               PipeProps(diameter=140.0, cost=60.0), PipeProps(diameter=160.0, cost=90.0),
-    #               PipeProps(diameter=180.0, cost=130.0), PipeProps(diameter=200.0, cost=170.0),
-    #               PipeProps(diameter=220.0, cost=300.0), PipeProps(diameter=240.0, cost=340.0),
-    #               PipeProps(diameter=260.0, cost=390.0), PipeProps(diameter=280.0, cost=430.0),
-    #               PipeProps(diameter=300.0, cost=470.0), PipeProps(diameter=320.0, cost=500.0)]
-    # network.cost_model = cost_model
-    #
-    # network.draw_pdf('net.pdf')
-    from layouts import SquareLayout
-    import numpy as np
-
-    network = NetworkGA2d(sinks=sinks, sources=sources)
-    layout = SquareLayout(30)
-    layout.scale = 0.1
-    cost_model = [PipeProps(diameter=0.0, cost=0.0),
-                  PipeProps(diameter=80.0, cost=23.0),
-                  PipeProps(diameter=100.0, cost=32.0),
-                  PipeProps(diameter=120.0, cost=50.0),
-                  PipeProps(diameter=140.0, cost=60.0),
-                  PipeProps(diameter=160.0, cost=90.0),
-                  PipeProps(diameter=180.0, cost=130.0),
-                  PipeProps(diameter=200.0, cost=170.0),
-                  PipeProps(diameter=220.0, cost=300.0),
-                  PipeProps(diameter=240.0, cost=340.0),
-                  PipeProps(diameter=260.0, cost=390.0),
-                  PipeProps(diameter=280.0, cost=430.0),
-                  PipeProps(diameter=300.0, cost=470.0),
-                  PipeProps(diameter=320.0, cost=500.0)]
-    network.layout = layout
-    network.cost_model = cost_model
-    # network.bit_representation = np.array(
-    #     [
-    #         [1,0,1,1,  1,0,1,1,  1,1,0,0,  0,1,1,0,  0,0,0,1,  0,0,1,1],
-    #         [0,0,0,0,  0,1,0,1,  1,0,0,1,  0,0,0,1,  1,0,1,1,  0,0,1,0],
-    #         [0,1,1,0,  1,0,1,0,  0,0,0,1,  0,1,0,0,  0,0,1,1,  0,0,1,1]
-    #     ]
-    # )
-    network.draw_pdf('for_test.pdf')
+            for j in range(m // self._b_len):
+                bits = self._c[i][j * self._b_len:(j + 1) * self._b_len]
+                self._redesign_edge(index=(i, j), gene=bits)
