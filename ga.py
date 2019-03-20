@@ -76,7 +76,8 @@ class GA:
     def run(self):
         self._configure_algorithm()
         population = self.toolbox.population(n=self.n_individuals)
-
+        # individual0 = self.toolbox.population0(n=1)[0]
+        # population[0] = individual0
         print('Start of evolution')
         # Evaluate the entire population
         fitnesses = list(map(self.toolbox.evaluate, population))
@@ -124,13 +125,13 @@ class GA:
 
             # The population is entirely replaced by the offspring
             population[:] = offspring
+            # population[0] = individual0
             self._update_log(population)
 
         print('-- End of (successful) evolution --')
         best_ind = tools.selBest(population, 1)[0]
-        self._draw_individual(best_ind, 'new.pdf')
+        self._draw_individual(best_ind, 'best.pdf')
         print(f'Best individual is {best_ind}, {best_ind.fitness.values}')
-        self._draw_individual(best_ind)
 
     def _configure_algorithm(self):
         creator.create("FitnessMin", base.Fitness, weights=(-1.0,))
@@ -196,9 +197,27 @@ class GA2d(GA):
 
         return ind1, ind2
 
-    # TODO 2d configurations
+    def attr0(self, k):
+        return [0 for _ in range(k)]
+
     def _configure_algorithm(self):
-        pass
+        creator.create("FitnessMin", base.Fitness, weights=(-1.0,))
+        creator.create("Individual", list, fitness=creator.FitnessMin)
+        n, m = self._individual_shape
+        self.toolbox = base.Toolbox()
+        self.toolbox.register("attr0", self.attr0, k=m)
+        self.toolbox.register("individual0", tools.initRepeat, creator.Individual,
+                              self.toolbox.attr0, n)
+        self.toolbox.register("population0", tools.initRepeat, list, self.toolbox.individual0)
+
+        self.toolbox.register("attr_bool", random.choices, (0, 1), k=m)
+        self.toolbox.register("individual", tools.initRepeat, creator.Individual,
+                              self.toolbox.attr_bool, n)
+        self.toolbox.register("population", tools.initRepeat, list, self.toolbox.individual)
+        self.toolbox.register("evaluate", self.evaluate)
+        self.toolbox.register("mate", GA2d.crossover_2point)
+        self.toolbox.register("mutate", GA2d.mutation, indpb=0.05)
+        self.toolbox.register("select", tools.selTournament, tournsize=3)
 
 
 if __name__ == "__main__":

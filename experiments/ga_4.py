@@ -1,15 +1,15 @@
 """
 - GA(100 поколений, 100 особей)
-- Квадратная сетка 100 узлов
-- Одномерная нумерация по построению
+- Шестиугольная сетка
+- Двумерная нумерация по построению, двумерные эволюционные операторы
 """
 
-from network import NetworkGA, Point
-from layouts import SquareGrid
-from ga import GA
+from network import NetworkGA2D, Point
+from layouts import HexagonGrid
+from ga import GA2d
 
 
-layout = SquareGrid(11, 11, 0.2)
+layout = HexagonGrid(10, 10, scale=0.2, start=Point(0, -1))
 cost_model = [dict(diam=0.0,   cost=0.0),
               dict(diam=80.0,  cost=23.0),
               dict(diam=100.0, cost=32.0),
@@ -25,7 +25,8 @@ cost_model = [dict(diam=0.0,   cost=0.0),
               dict(diam=300.0, cost=470.0),
               dict(diam=320.0, cost=500.0)]
 
-network = NetworkGA(layout, cost_model)
+
+network = NetworkGA2D(layout, cost_model)
 network.add_sink(demand=-120, pos=Point(x=2, y=2))
 network.add_source(demand=10, pos=Point(x=0, y=0))
 network.add_source(demand=20, pos=Point(x=1, y=0))
@@ -36,7 +37,7 @@ network.add_source(demand=20, pos=Point(x=0, y=2))
 network.add_source(demand=10, pos=Point(x=2, y=1))
 network.add_source(demand=20, pos=Point(x=1, y=2))
 
-algorithm = GA(network)
-algorithm.n_individuals = 1000
-algorithm.n_generations = 1000
+algorithm = GA2d(network)
+algorithm.n_individuals = 50
+algorithm.n_generations = 10
 algorithm.run()

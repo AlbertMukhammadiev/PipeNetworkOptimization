@@ -24,13 +24,14 @@ class Layout:
 
     @property
     def edges(self):
+        self._index_edges()
         return self._edges.copy()
 
     def distance(self, u, v):
         if not isinstance(u, Point):
-            u = self._nodes[u]['position']
+            u = self._nodes[u]['pos']
         if not isinstance(v, Point):
-            v = self._nodes[v]['position']
+            v = self._nodes[v]['pos']
         return math.hypot(v.y - u.y, v.x - u.x)
 
     def draw(self):
@@ -67,22 +68,18 @@ class Layout:
         plt.savefig(path, format='pdf')
         plt.close()
 
-    def add_node(self, node, position):
+    def add_node(self, node, position=None):
         if node not in self._nodes:
-            self._nodes[node] = dict(position=position, demand=0)
-            print(f'--- node {node} with position {position} was added')
-        else:
-            self._nodes[node]['position'] = position
-            print(f'--- position of node {node}'
-                  f'was changed to {position}')
+            self._nodes[node] = dict(pos=position, demand=0)
+            print(f'--- node {node} with pos {position} was added')
 
     def add_edge(self, u, v):
         self.add_node(u, u)
         self.add_node(v, v)
         if (u, v) not in self._edges and (v, u) not in self._edges:
             props = dict(
-                constr_No=self._current_index,
-                length=self._scale,
+                cindex=self._current_index,
+                len=self._scale,
             )
             self._edges[u, v] = props
             self._edges[v, u] = props
@@ -99,16 +96,16 @@ class Layout:
         start_node = sorted(graph.nodes, reverse=True).pop()
         path_bfs = nx.edge_bfs(graph, start_node)
         for i, edge in enumerate(path_bfs):
-            self._edges[edge]['bfs_ind'] = i
+            self._edges[edge]['indexBFS'] = i
 
     def _update_current_index(self):
         self._current_index += 1
 
     def _drawing_configurations(self):
-        pos = {node: props['position'] for node, props in self._nodes.items()}
+        pos = {node: props['pos'] for node, props in self._nodes.items()}
         kwargs = {
             'node_color': 'lightgoldenrodyellow',
-            'node_size': 50,
+            'node_size': 2,
             'node_shape': 's',
             'alpha': 1,
             'font_size': 1,
@@ -118,27 +115,26 @@ class Layout:
             'edge_labels': {}}
 
         for edge, props in self._edges.items():
-            label = f'l: {props["length"]}\n' \
-                f'index: {props["constr_No"]}/ {props["2d"]}'
+            label = f'l: {props["len"]}\n' \
+                f'cindex: {props["cindex"]}'
             kwargs['edge_labels'][edge] = label
         for node, props in self._nodes.items():
-            label = f'pos: ({props["position"].x}, {props["position"].y})\n'
+            label = f'pos: ({props["pos"].x}, {props["pos"].y})\n'
             kwargs['labels'][node] = label
 
         return pos, kwargs
 
 
 class RegularGrid(Layout):
-    def __init__(self, n_rows, n_columns, scale=1):
+    def __init__(self, n_rows, n_columns, scale=1, start=Point(0, 0)):
         super().__init__()
         self._n = n_rows
         self._m = n_columns
         self._scale = scale
-        self._start = Point(0, 0)
-        self._nodes[self._start] = {'position': self._start}
+        self._start = start
+        self._nodes[self._start] = {'pos': self._start, 'demand': 0}
         self._init_vectors()
         self._create()
-        self._index_edges()
 
     def _init_indexing_tools(self):
         self._current_index = 0
@@ -174,10 +170,10 @@ class SquareGrid(RegularGrid):
 
     def _index_edges_2d(self):
         for edge in self._edges:
-            index = self._edges[edge]['constr_No']
+            index = self._edges[edge]['cindex']
             i = index // (self._m * 2)
             j = index % (self._m * 2)
-            self._edges[edge]['2d'] = (i, j)
+            self._edges[edge]['cindex2d'] = (i, j)
 
     def _create(self):
         for _ in range(self._n):
@@ -199,10 +195,10 @@ class HexagonGrid(RegularGrid):
 
     def _index_edges_2d(self):
         for edge in self._edges:
-            index = self._edges[edge]['constr_No']
+            index = self._edges[edge]['cindex']
             i = index // (self._m * 3)
             j = index % (self._m * 3)
-            self._edges[edge]['2d'] = (i, j)
+            self._edges[edge]['cindex2d'] = (i, j)
 
     def _create(self):
         for _ in range(self._n):
@@ -219,5 +215,5 @@ class HexagonGrid(RegularGrid):
 
 
 if __name__ == '__main__':
-    layout = HexagonGrid(4, 6, 1)
-    layout.draw_pdf('square.pdf')
+    layout = HexagonGrid(10, 10, scale=0.2, start=Point(0, -1))
+    layout.draw_pdf('test_grid.pdf')
